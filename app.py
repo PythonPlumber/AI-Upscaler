@@ -20,6 +20,12 @@ def upscale_image(input_path, output_path, scale_factor):
     upscaled_image = cv2.resize(image, (0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
     cv2.imwrite(output_path, upscaled_image)
 
+def create_directories():
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+create_directories()
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -35,6 +41,7 @@ def upload_file():
         return render_template('index.html', error='No selected file')
 
     if file and allowed_file(file.filename):
+        create_directories()  # Ensure directories exist
         input_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         output_path_base = os.path.join(app.config['OUTPUT_FOLDER'], file.filename.split('.')[0])
         file.save(input_path)

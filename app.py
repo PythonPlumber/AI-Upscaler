@@ -1,13 +1,15 @@
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, request, send_from_directory, jsonify
 from PIL import Image
 import cv2
 import os
+import threading
+import time
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'output'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp', 'ico', 'jfif'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
@@ -25,6 +27,13 @@ def create_directories():
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 create_directories()
+
+def process_upscaling(input_path, output_path_base, scales, response_queue):
+    for scale in scales:
+        output_path = f"{output_path_base}_{scale}x.png"
+        upscale_image(input_path, output_path, scale)
+
+    response_queue.put(True)
 
 @app.route('/')
 def index():
@@ -47,14 +56,24 @@ def upload_file():
         file.save(input_path)
 
         scales = [2, 4, 6, 8, 10]
+        response_queue = []
 
-        for scale in scales:
-            output_path = f"{output_path_base}_{scale}x.png"
-            upscale_image(input_path, output_path, scale)
+        # Start a thread for upscaling
+        thread = threading.Thread(target=process_upscaling, args=(input_path, output_path_base, scales, response_queue))
+        thread.start()
 
-        return render_template('result.html', input_path=input_path, scales=scales)
+        return render_template('processing.html', input_path=input_path, scales=scales)
 
     return render_template('index.html', error='Invalid file format')
+
+@app.route('/status/<task_id>')
+def task_status(task_id):
+    response_queue = app.config['response_queue']
+
+    if task_id in response_queue:
+        return jsonify({'status': 'completed'})
+    else:
+        return jsonify({'status': 'processing'})
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
@@ -65,4 +84,5 @@ def output_file(filename):
     return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
 
 if __name__ == '__main__':
+    app.config['response_queue'] = []
     app.run(debug=True)
